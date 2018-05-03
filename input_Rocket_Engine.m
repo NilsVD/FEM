@@ -1,0 +1,125 @@
+function [x,elem,nel,nnp,ndm,ndf,nen,matparam, drlt, neum, robin_1, robin_2, loadcurve, Q]=input_Rocket_Engine()
+
+x = dlmread('Rocket_Engine.nodes'); % 1st colum containes node number
+x = x(:,2:end);              % remove 1st column
+
+conn = dlmread('Rocket_Engine.conn'); % 1st colum containes element number
+conn = conn(:,2:end);          % remove 1st column
+[nel,nen] = size(conn);
+
+% number of node points and number of spatial dimensions
+[nnp, ndm] = size(x);
+
+% number of degrees of freedom per node
+ndf = 1;  % temperature is a scalar!
+
+
+%elem=repmat(struct('cn',zeros(1,nen)),nel,1);
+
+% allocate memory for the element structure 
+% 1. organize connectivity list as a struct
+% 2. determine edof, element degrees of freedom
+% 3. reserve memory for state variables
+%    gradT  [gradT_x    gradT_y] and 
+%    q      [    q_x        q_y]
+% number of state variables
+nsv = 2 + 2;
+elem = repmat(struct('cn',zeros(nen,1), ...
+                     'edof', zeros(nen*ndf,1), ...
+                     'stateVar0', zeros(1,nsv), ...
+                     'stateVar', zeros(1,nsv) ...
+                    ),  nel, 1 );
+
+for e = 1:nel
+    elem(e).cn = conn(e,:);
+    elem(e).edof = elem(e).cn; 
+end
+
+
+
+% 
+
+% material parameter
+% heat conductivity
+matparam(1) = 22;
+
+% thickness of the plate (m)
+matparam(2) = 0.001;
+
+% density of titanium
+matparam(3) = 4540;
+
+% mass speci?c heat capacity of titanium 
+matparam(4) = 520;
+
+% Initial boundary temperature
+matparam(5) = 20;
+
+
+%-----------------------------------------------------------------------
+% load curves
+%-----------------------------------------------------------------------
+id = 1;
+loadcurve(id).id = id;
+loadcurve(id).scalefactor =  1.0;
+loadcurve(id).time =  [0.0   1.0];
+loadcurve(id).value = [1.0   1.0];
+
+% boundary conditions
+% node: Node where condition is applied
+% loadcurveID: id of load curve
+% ldof: load degree of freedom (1 for heat, 1 or 2 for mechanical)
+% scale: magnitude of bc
+% Dirichlet boundary condition
+%      node  loadcurveID      ldof        scale
+[NodesAN,NodesAE,NodesEF,NodesFI,NodesIJ,NodesJN] = BCNodes();
+
+drlt = repmat(struct('nodes',zeros(1,length(NodesAN)),'loadcurveID',0,'ldof',0,'scale',0),1,1);
+drlt.nodes = NodesAN;
+drlt.loadcurveID = 1;
+drlt.ldof = 1;
+drlt.scale = -150;
+
+%Test codes with constant temperarures
+% drlt_1 = repmat(struct('nodes',zeros(1,length(NodesFI)),'loadcurveID',0,'ldof',0,'scale',0),1,1);
+% drlt_1.nodes = NodesFI;
+% drlt_1.loadcurveID = 1;
+% drlt_1.ldof = 1;
+% drlt_1.scale = 2000;
+% 
+% drlt_2 = repmat(struct('nodes',zeros(1,length([NodesAE,NodesEF,NodesIJ,NodesJN])),'loadcurveID',0,'ldof',0,'scale',0),1,1);
+% drlt_2.nodes = [NodesAE,NodesEF,NodesIJ,NodesJN];
+% drlt_2.loadcurveID = 1;
+% drlt_2.ldof = 1;
+% drlt_2.scale = 20;
+
+% Robin boundary condition
+%nodes_AF = [35,86:89,34,84,85,33,32,76,27,28,77,29,79,30,79,80,31,81,82,83,26,74,75,25];
+%nodes_FI = [25,73,72,71,24,70,69,23,68,22,67,21,20,66,19,64,65,18,56,13,14,57,15,58,16,59,60,17,61,62,63,12];
+%nodes_IN = [12,54,55,11,53,52,51,10,50,49,9,48,8,47,7,6,46,5,4,44,45,3,40,41,42,43,1];
+robin_1 = repmat(struct('nodes',zeros(1,length(NodesFI)),'alpha',0,'Tinf',0),1,1);
+robin_2 = repmat(struct('nodes',[],'alpha',20,'Tinf',20),4,1);
+
+%F-I boundary
+robin_1(1).nodes = NodesFI;
+robin_1(1).alpha = 120;     %alpha_1
+robin_1(1).Tinf = 2000;     %Tinf_1
+
+%A-F boundary and I-N boundary;
+robin_2(1).nodes = NodesAE;
+robin_2(2).nodes = NodesEF;
+robin_2(3).nodes = NodesIJ;
+robin_2(4).nodes = NodesJN;
+
+ %F-I boundary
+neum = repmat(struct('nodes',zeros(1,length([NodesAE,NodesEF,NodesFI,NodesIJ,NodesJN])),'loadcurveID',0,'ldof',0,'scale',0),1,1);
+neum.nodes = [NodesAE,NodesEF,NodesFI,NodesIJ,NodesJN];
+neum.loadcurveID = 1;     %alpha_1
+neum.ldof = 1;     %Tinf_1
+neum.scale = 100;
+
+
+% constant heat source 
+Q = 0;
+
+end
