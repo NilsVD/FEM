@@ -110,6 +110,7 @@ while (time < stopTime)
     j = 1;
     for i=1:length(robin_1.nodes)
         q_0 = robin_1.alpha*(a(robin_1.nodes(i))-robin_1.Tinf);
+        %q_0 = (-1)*robin_1.alpha*(robin_1.Tinf);
         RobinValue(j) = q_0*interp1(loadcurve(lcID).time, loadcurve(lcID).value, ...
             time, 'linear', 'extrap');
         j = j + 1;
@@ -118,6 +119,7 @@ while (time < stopTime)
     for k=1:4
         for i=1:length(robin_2(k).nodes)
             q_0 = robin_2(k).alpha*(a(robin_2(k).nodes(i))-robin_2(k).Tinf);
+            %q_0 = (-1)*robin_2(k).alpha*(robin_2(k).Tinf);
             RobinValue(j) = q_0*interp1(loadcurve(lcID).time, loadcurve(lcID).value, ...
             time, 'linear', 'extrap');
             j = j + 1;
@@ -197,7 +199,8 @@ while (time < stopTime)
             t = matparam(2);
             
             % element internal force vector 
-            finte = -B'* q * Ae * t;
+            finte = B'* q * Ae * t;
+            %finte = [0,0,0]';
             
             % element volume force vector 
             % fvole = 
@@ -209,18 +212,39 @@ while (time < stopTime)
             Ke = k*(B')*B*t*Ae;
             
             alpha = 0;
+            T_inf = 0;
             BoolRobin_1 = ismember(elem(e).cn,robin_1.nodes);
-            BoolRobin_2 = ismember(elem(e).cn, [robin_2(1).nodes,robin_2(2).nodes,robin_2(3).nodes,robin_2(4).nodes]);
+            BoolRobin_2 = 0;
+            %BoolRobin_2 = ismember(elem(e).cn, [robin_2(1).nodes,robin_2(2).nodes,robin_2(3).nodes,robin_2(4).nodes]);
+            for i=1:4
+                if(ismember(elem(e).cn,robin_2(i).nodes) == 2)
+                    BoolRobin_2 = ismember(elem(e).cn,robin_2(i).nodes);
+                end
+            end
+            
             if (sum(BoolRobin_1) == 2)
                 alpha = robin_1.alpha;
+                T_inf = robin_1.Tinf;
             end
+            % && ~isequal(elem(e).cn,[74,26,83]) && ~isequal(elem(e).cn,[53,11,55])
             if (sum(BoolRobin_2) == 2)
-                alpha = robin_2.alpha;
+                alpha = robin_2(1).alpha;
+                T_inf = robin_2(1).Tinf;
             end
-
+            if (sum(BoolRobin_1) == 2 && sum(BoolRobin_2) == 2)
+                alpha = (robin_1.alpha + robin_2(1).alpha)/2;
+                T_inf = (robin_1.Tinf + robin_2(1).Tinf)/2;
+            end
+            if (e == 52)
+                disp('e = 52')
+                BoolRobin_1
+                BoolRobin_2
+                alpha
+            end
             Kce = zeros(3,3);
             if (alpha ~= 0)
                 Kce = plantml(ex', ey', t*alpha);
+                fsur(edof) = fsur(edof) + alpha*(ae-T_inf);
             end
             
             % assemble finte into global internal force vector fint
@@ -246,6 +270,7 @@ while (time < stopTime)
             % calculate increment of node displacements
             da = zeros(size(a));
             da(freeDofs) = K(freeDofs,freeDofs)\rsd(freeDofs);
+            %da(freeDofs) = rsd(freeDofs)\K(freeDofs,freeDofs);
             a(freeDofs) = a(freeDofs) + da(freeDofs);
             a(drltDofs) = a(drltDofs) + drltValueIncr;
             drltValueIncr = zeros(size(drltValueIncr));

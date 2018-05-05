@@ -72,6 +72,10 @@ end
 
 % unknown node temperatures
 a = zeros(ndf*nnp,1);
+
+for i=1:length(a)
+    a(i) = 20;
+end
 %a = [20;0;0;0];
 
 % simulation time and time/load step
@@ -105,7 +109,7 @@ while (time < stopTime)
     T_0 = matparam(5);
     j = 1;
     for i=1:length(robin_1.nodes)
-        q_0 = robin_1.alpha*(T_0-robin_1.Tinf);
+        q_0 = robin_1.alpha*(a(robin_1.nodes(i))-robin_1.Tinf);
         RobinValue(j) = q_0*interp1(loadcurve(lcID).time, loadcurve(lcID).value, ...
             time, 'linear', 'extrap');
         j = j + 1;
@@ -113,7 +117,7 @@ while (time < stopTime)
     
     for k=1:4
         for i=1:length(robin_2(k).nodes)
-            q_0 = robin_2(k).alpha*(T_0-robin_2(k).Tinf);
+            q_0 = robin_2(k).alpha*(a(robin_2(k).nodes(i))-robin_2(k).Tinf);
             RobinValue(j) = q_0*interp1(loadcurve(lcID).time, loadcurve(lcID).value, ...
             time, 'linear', 'extrap');
             j = j + 1;
@@ -204,7 +208,20 @@ while (time < stopTime)
             % element stiffness matrix 
             Ke = k*(B')*B*t*Ae;
             
-            Kce = (N')*N*t
+            alpha = 0;
+            BoolRobin_1 = ismember(elem(e).cn,robin_1.nodes);
+            BoolRobin_2 = ismember(elem(e).cn, [robin_2(1).nodes,robin_2(2).nodes,robin_2(3).nodes,robin_2(4).nodes]);
+            if (sum(BoolRobin_1) == 2)
+                alpha = robin_1.alpha;
+            end
+            if (sum(BoolRobin_2) == 2)
+                alpha = robin_2.alpha;
+            end
+
+            Kce = zeros(3,3);
+            if (alpha ~= 0)
+                Kce = plantml(ex', ey', t*alpha);
+            end
             
             % assemble finte into global internal force vector fint
             fint(edof) = fint(edof) + finte;
@@ -213,7 +230,7 @@ while (time < stopTime)
             % fvol(gdof) = fvol(gdof) + fvole;
             
             % assemble Ke into the global stiffness matrix K
-            K(edof,edof) = K(edof,edof) + Ke;
+            K(edof,edof) = K(edof,edof) + Ke + Kce;
             
         end % element loop
 
@@ -242,7 +259,7 @@ while (time < stopTime)
         elem(e).stateVar0 = elem(e).stateVar;
     end;
     
-    postprocessing(step, time, ndm, elem, x, drltValue, drltDofs, fsur, neumDofs, a);
+    postprocessing(step, time, ndm, elem, x, drltValue, drltDofs, fsur, RobinDofs, a);
     
   
                       
