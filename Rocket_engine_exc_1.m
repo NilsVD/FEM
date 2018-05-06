@@ -79,7 +79,7 @@ end
 %a = [20;0;0;0];
 
 % simulation time and time/load step
-stopTime = 1.0;
+stopTime = 50.0;
 dt = 0.1;
 % numerical tolerance to detect equilibrium
 TOL = 1e-10;
@@ -109,7 +109,7 @@ while (time < stopTime)
     T_0 = matparam(5);
     j = 1;
     for i=1:length(robin_1.nodes)
-        q_0 = robin_1.alpha*(a(robin_1.nodes(i))-robin_1.Tinf);
+        q_0 = (-1)*robin_1.alpha*(a(robin_1.nodes(i))-robin_1.Tinf);
         %q_0 = (-1)*robin_1.alpha*(robin_1.Tinf);
         RobinValue(j) = q_0*interp1(loadcurve(lcID).time, loadcurve(lcID).value, ...
             time, 'linear', 'extrap');
@@ -118,7 +118,7 @@ while (time < stopTime)
     
     for k=1:4
         for i=1:length(robin_2(k).nodes)
-            q_0 = robin_2(k).alpha*(a(robin_2(k).nodes(i))-robin_2(k).Tinf);
+            q_0 = (-1)*robin_2(k).alpha*(a(robin_2(k).nodes(i))-robin_2(k).Tinf);
             %q_0 = (-1)*robin_2(k).alpha*(robin_2(k).Tinf);
             RobinValue(j) = q_0*interp1(loadcurve(lcID).time, loadcurve(lcID).value, ...
             time, 'linear', 'extrap');
@@ -209,7 +209,7 @@ while (time < stopTime)
             k = matparam(1);
             
             % element stiffness matrix 
-            Ke = k*(B')*B*t*Ae;
+            Ke = k*(B')*B*t*Ae*matparam(3);
             
             alpha = 0;
             T_inf = 0;
@@ -217,7 +217,7 @@ while (time < stopTime)
             BoolRobin_2 = 0;
             %BoolRobin_2 = ismember(elem(e).cn, [robin_2(1).nodes,robin_2(2).nodes,robin_2(3).nodes,robin_2(4).nodes]);
             for i=1:4
-                if(ismember(elem(e).cn,robin_2(i).nodes) == 2)
+                if(sum(ismember(elem(e).cn,robin_2(i).nodes) == 2))
                     BoolRobin_2 = ismember(elem(e).cn,robin_2(i).nodes);
                 end
             end
@@ -235,16 +235,13 @@ while (time < stopTime)
                 alpha = (robin_1.alpha + robin_2(1).alpha)/2;
                 T_inf = (robin_1.Tinf + robin_2(1).Tinf)/2;
             end
-            if (e == 52)
-                disp('e = 52')
-                BoolRobin_1
-                BoolRobin_2
-                alpha
-            end
+
+            disp('Temp at odes 79: ')
+            a(79)
             Kce = zeros(3,3);
             if (alpha ~= 0)
-                Kce = plantml(ex', ey', t*alpha);
-                fsur(edof) = fsur(edof) + alpha*(ae-T_inf);
+                Kce = plantml(ex', ey', t*alpha)*matparam(3);
+                fsur(edof) = fsur(edof) - alpha*(ae-T_inf)*Ae;
             end
             
             % assemble finte into global internal force vector fint
@@ -263,7 +260,7 @@ while (time < stopTime)
         rsn = norm(rsd) + norm(drltValueIncr);
         fprintf(1, ' %2d. residuum norm= %e\n', iter, rsn);
         
-        if (rsn >= TOL && iter < 1)
+        if (rsn >= TOL && iter < 2)
             disp('     solve and update');
             % modified right hand side
             rsd(freeDofs) = rsd(freeDofs) - K(freeDofs,drltDofs) * drltValueIncr;
