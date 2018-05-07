@@ -79,8 +79,8 @@ end
 %a = [20;0;0;0];
 
 % simulation time and time/load step
-stopTime = 1.0;
-dt = 0.1;
+stopTime = 500.0;
+dt = 10;
 % numerical tolerance to detect equilibrium
 TOL = 1e-10;
 %TOL = 2;
@@ -154,7 +154,7 @@ while (time < stopTime)
         % initialise global tangent stiffness matrix
         K = zeros(ndf*nnp,ndf*nnp);
         
-        fsur = zeros(ndf*nnp,1);
+        %fsur = zeros(ndf*nnp,1);
         
         % initialise global residuum
         rsd = zeros(ndf*nnp,1);
@@ -176,6 +176,7 @@ while (time < stopTime)
                         
             % element volume force vector
             %fvole = zeros(size(edof));
+            fsure=zeros(nen, 1);
          
             
             % area of the element 
@@ -199,7 +200,8 @@ while (time < stopTime)
             %T = Ne*ae;
                 
             % Fourier's law
-            [q, D, elem(e).stateVar(1,:)] = fourierLaw2d(gradT, matparam, elem(e).stateVar0(1,:));
+            [q, D, elem(e).stateVar(1,:)] = fourierLaw2d(gradT, matparam, elem(e).stateVar0(1,:));          %%------
+            %[q, D, elem(e).stateVar] = fourierLaw2d(gradT, matparam, elem(e).stateVar0);
             
             % thickness of the plate 
             t = matparam(2);
@@ -237,7 +239,7 @@ while (time < stopTime)
                 for i=j:3
                     if(x2 == 0)
                         x2 = BoolRobin_1(i)*ex(i);
-                        y2 = BoolRobin_1(i)*ey(j);
+                        y2 = BoolRobin_1(i)*ey(i);
                     end
                 end
                 alpha = robin_1.alpha;
@@ -256,7 +258,9 @@ while (time < stopTime)
                     test1 = [0,0,0;0,2,1;0,1,2];
                 end
                 Kce = Kce + L/6*test1*alpha*t;
-                fsur(edof) = fsur(edof) + robin_int;
+                %fsur(edof) = fsur(edof) + robin_int;
+                %fsur(edof) = fsur(edof) + Kce*(ae-T_inf);
+                fsure = fsure + Kce*(ae-T_inf);
             end
             BoolRobin_2 = 0;
             %BoolRobin_2 = ismember(elem(e).cn, [robin_2(1).nodes,robin_2(2).nodes,robin_2(3).nodes,robin_2(4).nodes]);
@@ -294,7 +298,9 @@ while (time < stopTime)
                         test1 = [0,0,0;0,2,1;0,1,2];
                     end
                     Kce = Kce + L/6*test1*alpha*t;
-                    fsur(edof) = fsur(edof) + robin_int;
+                    %fsur(edof) = fsur(edof) + robin_int;
+                    %fsur(edof) = fsur(edof) + Kce*(ae-T_inf);
+                    fsure = fsure + Kce*(ae-T_inf);
                 end
             end
             
@@ -304,34 +310,34 @@ while (time < stopTime)
             
             % assemble finte into global internal force vector fint
             fint(edof) = fint(edof) + finte;
-            if(e == 53)
-                disp('e = 53')
-                Kce
-                Ke
-                L
-            end
-            if(e == 51)
-                disp('e = 51')
-                Kce
-                Ke
-                L
-            end
-            if(e == 52)
-                disp('e = 52')
-                Kce
-                Ke
-                L
-            end
-            if(e == 99)
-                disp('e = 99')
-                Kce
-                Ke
-                L
-            end
+%             if(e == 53)
+%                 disp('e = 53')
+%                 Kce
+%                 Ke
+%                 L
+%             end
+%             if(e == 51)
+%                 disp('e = 51')
+%                 Kce
+%                 Ke
+%                 L
+%             end
+%             if(e == 52)
+%                 disp('e = 52')
+%                 Kce
+%                 Ke
+%                 L
+%             end
+%             if(e == 99)
+%                 disp('e = 99')
+%                 Kce
+%                 Ke
+%                 L
+%             end
             
             % assemble fvole into global volume force vector fvol
             % fvol(gdof) = fvol(gdof) + fvole;
-            
+            fsur(edof) = fsur(edof) + fsure;
             
             % assemble Ke into the global stiffness matrix K
             K(edof,edof) = K(edof,edof) + Ke + Kce;
@@ -339,11 +345,12 @@ while (time < stopTime)
         end % element loop
 
         % calculate residuum and its norm
-        rsd(freeDofs) = -(fint(freeDofs) - fvol(freeDofs) - fsur(freeDofs));
+        %rsd(freeDofs) = -(fint(freeDofs) - fvol(freeDofs) - fsur(freeDofs));            %%.------
+        rsd(freeDofs) = -fint(freeDofs) - fsur(freeDofs);            %%.------
         rsn = norm(rsd) + norm(drltValueIncr);
         fprintf(1, ' %2d. residuum norm= %e\n', iter, rsn);
         
-        if (rsn >= TOL && iter < 2)
+        if (rsn >= TOL && iter < 1)
             disp('     solve and update');
             % modified right hand side
             rsd(freeDofs) = rsd(freeDofs) - K(freeDofs,drltDofs) * drltValueIncr;
