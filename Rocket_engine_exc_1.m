@@ -154,6 +154,8 @@ while (time < stopTime)
         % initialise global tangent stiffness matrix
         K = zeros(ndf*nnp,ndf*nnp);
         
+        fsur = zeros(ndf*nnp,1);
+        
         % initialise global residuum
         rsd = zeros(ndf*nnp,1);
         
@@ -164,8 +166,8 @@ while (time < stopTime)
             edof = elem(e).edof;
             
             % coordinates of the element nodes
-            ex = x(elem(e).cn,1);   % x-coord
-            ey = x(elem(e).cn,2);   % y-coord
+            ex = x(elem(e).cn,1)*0.001;   % x-coord
+            ey = x(elem(e).cn,2)*0.001;   % y-coord
             
             % temperature values at the element nodes
             ae = a(edof);
@@ -174,6 +176,7 @@ while (time < stopTime)
                         
             % element volume force vector
             %fvole = zeros(size(edof));
+         
             
             % area of the element 
             Ae=1/2*det([ones(3,1) ex ey]);
@@ -201,8 +204,7 @@ while (time < stopTime)
             % thickness of the plate 
             t = matparam(2);
             
-            % element internal force vector 
-            finte = B'* q * Ae * t;
+            
             %finte = [0,0,0]';
             
             % element volume force vector 
@@ -212,7 +214,7 @@ while (time < stopTime)
             k = matparam(1);
             
             % element stiffness matrix 
-            Ke = k*(B')*B*t*Ae*matparam(3);
+            Ke = k*(B')*B*t*Ae;
             
             alpha = 0;
             T_inf = 0;
@@ -220,6 +222,7 @@ while (time < stopTime)
             x2 = 0;
             y1 = 0;
             y2 = 0;
+            L = 0;
             BoolRobin = zeros(1,3);
             BoolRobin_1 = ismember(elem(e).cn,robin_1.nodes);
             if (sum(BoolRobin_1) == 2)
@@ -237,6 +240,23 @@ while (time < stopTime)
                         y2 = BoolRobin_1(i)*ey(j);
                     end
                 end
+                alpha = robin_1.alpha;
+                T_inf = robin_1.Tinf;
+                BoolRobin = BoolRobin_1;
+                
+                L = sqrt((x2-x1)^2 + (y2-y1)^2);
+                
+                robin_int = T_inf*L/2*BoolRobin'*alpha*t;
+                test1 = zeros(3,3);
+                if(BoolRobin == [1,1,0])
+                    test1 = [2, 1, 0; 1, 2, 0; 0, 0, 0];
+                elseif(BoolRobin == [1,0,1])
+                    test1 = [2,0,1;0,0,0;1,0,2];
+                elseif(BoolRobin == [0,1,1])
+                    test1 = [0,0,0;0,2,1;0,1,2];
+                end
+                Kce = Kce + L/6*test1*alpha*t;
+                fsur(edof) = fsur(edof) + robin_int;
             end
             BoolRobin_2 = 0;
             %BoolRobin_2 = ismember(elem(e).cn, [robin_2(1).nodes,robin_2(2).nodes,robin_2(3).nodes,robin_2(4).nodes]);
@@ -251,70 +271,67 @@ while (time < stopTime)
                         y1 = BoolRobin_2(j)*ey(j);
                         j = j + 1;
                     end
-                    for i=j:3
+                    for k=j:3
                         if(x2 == 0)
-                            x2 = BoolRobin_2(i)*ex(i);
-                            y2 = BoolRobin_2(i)*ey(i);
+                            x2 = BoolRobin_2(k)*ex(k);
+                            y2 = BoolRobin_2(k)*ey(k);
                         end
                     end
+                    
+                    alpha = robin_2(i).alpha;
+                    T_inf = robin_2(i).Tinf;
+                    BoolRobin = BoolRobin_2;
+                
+                    L = sqrt((x2-x1)^2 + (y2-y1)^2);
+                
+                    robin_int = T_inf*L/2*BoolRobin'*alpha*t;
+                    test1 = zeros(3,3);
+                    if(BoolRobin == [1,1,0])
+                        test1 = [2, 1, 0; 1, 2, 0; 0, 0, 0];
+                    elseif(BoolRobin == [1,0,1])
+                        test1 = [2,0,1;0,0,0;1,0,2];
+                    elseif(BoolRobin == [0,1,1])
+                        test1 = [0,0,0;0,2,1;0,1,2];
+                    end
+                    Kce = Kce + L/6*test1*alpha*t;
+                    fsur(edof) = fsur(edof) + robin_int;
                 end
-            end
-            
-            if (sum(BoolRobin_1) == 2)
-                alpha = robin_1.alpha;
-                T_inf = robin_1.Tinf;
-                BoolRobin = BoolRobin_1;
-            end
-            % && ~isequal(elem(e).cn,[74,26,83]) && ~isequal(elem(e).cn,[53,11,55])
-            if (sum(BoolRobin_2) == 2)
-                alpha = robin_2(1).alpha;
-                T_inf = robin_2(1).Tinf;
-                BoolRobin = BoolRobin_2;
-            end
-            if (sum(BoolRobin_1) == 2 && sum(BoolRobin_2) == 2)
-                alpha = (robin_1.alpha + robin_2(1).alpha)/2;
-                T_inf = (robin_1.Tinf + robin_2(1).Tinf)/2;
-                BoolRobin = 2*BoolRobin_1;
-            end
-
-            
-            if (sum(BoolRobin_1) == 2 || sum(BoolRobin_2) == 2)
-                
-                L = sqrt((x2-x1)^2 + (y2-y1)^2);
-                
-                
-                fun_robin = @(X) 1/(2*Ae)*[ex(2)*ey(3)-ex(3)*ey(2)+(ey(2)-ey(3))*X+(ex(3)-ex(2))*(ey(2)+(X-ex(2)*(ey(3)-ey(2)))/(ex(3)-ex(2)))*sqrt(1+((ey(3)-ey(2))/(ex(3)-ex(2)))^2), ...
-                    ex(3)*ey(1)-ex(1)*ey(3)+(ey(3)-ey(1))*X+(ex(1)-ex(3))*(ey(1)+(X-ex(1)*(ey(3)-ey(1)))/(ex(3)-ex(1)))*sqrt(1+((ey(3)-ey(1))/(ex(3)-ex(1)))^2), ...
-                    ex(1)*ey(2)-ex(2)*ey(1)+(ey(1)-ey(2))*X+(ex(1)-ex(2))*(ey(1)+(X-ex(1)*(ey(2)-ey(1)))/(ex(2)-ex(1)))*sqrt(1+((ey(2)-ey(1))/(ex(2)-ex(1)))^2)];
-
-                %robin_int = alpha*T_inf*t*integral(fun_robin,x1,x2)
-                robin_int = T_inf*L/2*BoolRobin'*alpha*t;
-                test1 = zeros(3,3);
-                if(BoolRobin == [1,1,0])
-                    test1 = [2, 1, 0; 1, 2, 0; 0, 0, 0];
-                elseif(BoolRobin == [1,0,1])
-                    test1 = [2,0,1;0,0,0;1,0,2];
-                elseif(BoolRobin == [0,1,1])
-                    test1 = [0,0,0;0,2,1;0,1,2];
-                end
-                Kce = L^2/6*test1*alpha*t;
-            end
-            
-            if (alpha ~= 0)
-                %Kce = plantml(ex', ey', t*alpha)*matparam(3);
-                %fsur(edof) = fsur(edof) + robin_int;
-                fsur(edof) =robin_int;
             end
             
             Ce = plantml(ex', ey', matparam(4)*matparam(3));
+            % element internal force vector 
+            finte = -B'* q * Ae * t;% + Kce*ae;
             
             % assemble finte into global internal force vector fint
             fint(edof) = fint(edof) + finte;
-            if(e == 110)
+            if(e == 53)
+                disp('e = 53')
                 Kce
+                Ke
+                L
             end
+            if(e == 51)
+                disp('e = 51')
+                Kce
+                Ke
+                L
+            end
+            if(e == 52)
+                disp('e = 52')
+                Kce
+                Ke
+                L
+            end
+            if(e == 99)
+                disp('e = 99')
+                Kce
+                Ke
+                L
+            end
+            
             % assemble fvole into global volume force vector fvol
             % fvol(gdof) = fvol(gdof) + fvole;
+            
             
             % assemble Ke into the global stiffness matrix K
             K(edof,edof) = K(edof,edof) + Ke + Kce;
