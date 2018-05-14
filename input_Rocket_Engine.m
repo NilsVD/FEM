@@ -1,10 +1,11 @@
-function [x,elem,nel,nnp,ndm,ndf,nen,matparam, drlt, neum, robin_1, robin_2, loadcurve, Q]=input_Rocket_Engine()
+function [x,elem,nel,nnp,ndm,ndf,nen,matparam,drlt,robin,loadcurve,Q]=input_Rocket_Engine()
 
+% import mesh:
 x = dlmread('Rocket_Engine.nodes'); % 1st colum containes node number
-x = x(:,2:end);              % remove 1st column
+x = x(:,2:end);                     % remove 1st column
 
 conn = dlmread('Rocket_Engine.conn'); % 1st colum containes element number
-conn = conn(:,2:end);          % remove 1st column
+conn = conn(:,2:end);                 % remove 1st column
 [nel,nen] = size(conn);
 
 % number of node points and number of spatial dimensions
@@ -12,9 +13,6 @@ conn = conn(:,2:end);          % remove 1st column
 
 % number of degrees of freedom per node
 ndf = 1;  % temperature is a scalar!
-
-
-%elem=repmat(struct('cn',zeros(1,nen)),nel,1);
 
 % allocate memory for the element structure 
 % 1. organize connectivity list as a struct
@@ -35,10 +33,6 @@ for e = 1:nel
     elem(e).cn = conn(e,:);
     elem(e).edof = elem(e).cn; 
 end
-
-
-
-% 
 
 % material parameter
 % heat conductivity
@@ -66,59 +60,50 @@ loadcurve(id).scalefactor =  1.0;
 loadcurve(id).time =  [0.0   1.0];
 loadcurve(id).value = [1.0   1.0];
 
+%Retrieves all boundary nodes for the different boundaries.
+[NodesAN,NodesAE,NodesEF,NodesFI,NodesIJ,NodesJN] = BCNodes();
+
 % boundary conditions
 % node: Node where condition is applied
 % loadcurveID: id of load curve
 % ldof: load degree of freedom (1 for heat, 1 or 2 for mechanical)
 % scale: magnitude of bc
-% Dirichlet boundary condition
-%      node  loadcurveID      ldof        scale
-[NodesAN,NodesAE,NodesEF,NodesFI,NodesIJ,NodesJN] = BCNodes();
 
+% Dirichlet boundary condition on boundaries A-N
 drlt = repmat(struct('nodes',zeros(1,length(NodesAN)),'loadcurveID',0,'ldof',0,'scale',0),1,1);
 drlt.nodes = NodesAN;
 drlt.loadcurveID = 1;
 drlt.ldof = 1;
 drlt.scale = -150;
 
-%Test codes with constant temperarures
-% drlt_1 = repmat(struct('nodes',zeros(1,length(NodesFI)),'loadcurveID',0,'ldof',0,'scale',0),1,1);
-% drlt_1.nodes = NodesFI;
-% drlt_1.loadcurveID = 1;
-% drlt_1.ldof = 1;
-% drlt_1.scale = 2000;
-% 
-% drlt_2 = repmat(struct('nodes',zeros(1,length([NodesAE,NodesEF,NodesIJ,NodesJN])),'loadcurveID',0,'ldof',0,'scale',0),1,1);
-% drlt_2.nodes = [NodesAE,NodesEF,NodesIJ,NodesJN];
-% drlt_2.loadcurveID = 1;
-% drlt_2.ldof = 1;
-% drlt_2.scale = 20;
+%Robin boundary conditions on all remaining boundaries
+robin = repmat(struct('nodes',zeros(1,length(NodesFI)),'alpha',0,'Tinf',0),5,1);
 
-% Robin boundary condition
-%nodes_AF = [35,86:89,34,84,85,33,32,76,27,28,77,29,79,30,79,80,31,81,82,83,26,74,75,25];
-%nodes_FI = [25,73,72,71,24,70,69,23,68,22,67,21,20,66,19,64,65,18,56,13,14,57,15,58,16,59,60,17,61,62,63,12];
-%nodes_IN = [12,54,55,11,53,52,51,10,50,49,9,48,8,47,7,6,46,5,4,44,45,3,40,41,42,43,1];
-robin_1 = repmat(struct('nodes',zeros(1,length(NodesFI)),'alpha',0,'Tinf',0),1,1);
-robin_2 = repmat(struct('nodes',[],'alpha',20,'Tinf',20),4,1);
+%Fills in all different conditions:
+%A-E boundary
+robin(1).nodes = NodesAE;
+robin(1).alpha = 20;     
+robin(1).Tinf = 20; 
+
+%E-F boundary
+robin(2).nodes = NodesEF;
+robin(2).alpha = 20;     
+robin(2).Tinf = 20; 
 
 %F-I boundary
-robin_1(1).nodes = NodesFI;
-robin_1(1).alpha = 120;     %alpha_1
-robin_1(1).Tinf = 2000;     %Tinf_1
+robin(3).nodes = NodesFI;
+robin(3).alpha = 120;     
+robin(3).Tinf = 2000;     
 
-%A-F boundary and I-N boundary;
-robin_2(1).nodes = NodesAE;
-robin_2(2).nodes = NodesEF;
-robin_2(3).nodes = NodesIJ;
-robin_2(4).nodes = NodesJN;
+%I-J boundary
+robin(4).nodes = NodesIJ;
+robin(4).alpha = 20;     
+robin(4).Tinf = 20; 
 
- %F-I boundary
-neum = repmat(struct('nodes',zeros(1,length([NodesAE,NodesEF,NodesFI,NodesIJ,NodesJN])),'loadcurveID',0,'ldof',0,'scale',0),1,1);
-neum.nodes = [NodesAE,NodesEF,NodesFI,NodesIJ,NodesJN];
-neum.loadcurveID = 1;     %alpha_1
-neum.ldof = 1;     %Tinf_1
-neum.scale = 100;
-
+%J-N boundary
+robin(5).nodes = NodesJN;
+robin(5).alpha = 20;     
+robin(5).Tinf = 20; 
 
 % constant heat source 
 Q = 0;
